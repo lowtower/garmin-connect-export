@@ -54,10 +54,10 @@ from filtering import read_exclude, update_download_stats
 COOKIE_JAR = http.cookiejar.CookieJar()
 OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(COOKIE_JAR), urllib.request.HTTPSHandler(debuglevel=0))
 
-SCRIPT_VERSION = '4.4.0'
+SCRIPT_VERSION = '4.5.0'
 
 # This version here should correspond to what is written in CONTRIBUTING.md#python-3x-versions
-MINIMUM_PYTHON_VERSION = (3, 8)
+MINIMUM_PYTHON_VERSION = (3, 10)
 
 # this is almost the datetime format Garmin used in the activity-search-service
 # JSON 'display' fields (Garmin didn't zero-pad the date and the hour, but %d and %H do)
@@ -997,10 +997,16 @@ def annotate_activity_list(activities, start, exclude_list, type_filter):
             action = 's'
         elif str(activity['activityId']) in exclude_list:
             action = 'e'
-        elif type_filter is not None and activity['activityType']['typeId'] not in type_filter:
-            action = 'f'
         else:
-            action = 'd'
+            activity_type = activity['activityType']
+            if (
+                type_filter is not None
+                and str(activity_type['typeId']) not in type_filter
+                and activity_type['typeKey'] not in type_filter
+            ):
+                action = 'f'
+            else:
+                action = 'd'
 
         action_list.append({"index": index, "action": action, "activity": activity})
 
@@ -1159,8 +1165,11 @@ def process_activity_item(item, number_of_items, device_dict, type_filter, activ
     # Action: Filtered out by typeId
     if action == 'f':
         # Display which entry we're skipping.
-        type_id = actvty['activityType']['typeId']
-        print(f"Filtering out due to type ID {type_id} not in {type_filter}: Garmin Connect activity ", end='')
+        activity_type = actvty['activityType']
+        print(
+            f"Filtering out due to type {activity_type['typeKey']} (ID {activity_type['typeId']}) not in {type_filter}: Garmin Connect activity ",
+            end='',
+        )
         print(f"({current_index}/{number_of_items}) [{actvty['activityId']}]")
         return
 
@@ -1298,7 +1307,7 @@ def main(argv):
 
     activities = fetch_activity_list(args, total_to_download)
 
-    type_filter = list(map(int, args.type_filter.split(','))) if args.type_filter is not None else None
+    type_filter = args.type_filter.split(',') if args.type_filter is not None else None
 
     action_list = annotate_activity_list(activities, args.start_activity_no, exclude_list, type_filter)
 
